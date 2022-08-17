@@ -22,6 +22,15 @@ object Dependencies {
 
   lazy val zioHttp = org.d11 %% "zhttp" % version.zioHttp
 
+  lazy val runner = Seq(
+    zio,
+    zioNio,
+    zioPrelude,
+    zioMacros,
+    zioTest    % Test,
+    zioTestSbt % Test
+  )
+
   lazy val core = Seq(
     zio,
     zioNio,

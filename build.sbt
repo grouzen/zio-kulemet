@@ -9,8 +9,20 @@ inThisBuild(
 lazy val root =
   project
     .in(file("."))
-    .aggregate(core, http, httpDefault, feederJsonDefault)
+    .aggregate(runner, core, http, httpDefault, feederJsonDefault)
     .settings(publish / skip := true)
+
+lazy val runner =
+  project
+    .in(file("modules/runner"))
+    .dependsOn(core, http, httpDefault, feederJsonDefault)
+    .settings(stdSettings("runner"))
+    .settings(
+      libraryDependencies := Dependencies.runner
+    )
+    .settings(
+      testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
+    )
 
 lazy val core =
   project
@@ -38,7 +50,7 @@ lazy val http =
 lazy val httpDefault =
   project
     .in(file("modules/http-default"))
-    .dependsOn(core)
+    .dependsOn(core, http)
     .settings(stdSettings("http-default"))
     .settings(
       libraryDependencies := Dependencies.httpDefault

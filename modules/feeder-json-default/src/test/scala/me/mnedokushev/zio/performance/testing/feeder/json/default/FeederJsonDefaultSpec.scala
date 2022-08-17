@@ -1,6 +1,5 @@
 package me.mnedokushev.zio.performance.testing.feeder.json.default
 
-import me.mnedokushev.zio.performance.testing.feeder.json.default.FeederStrategy.Circular
 import zio._
 import zio.test._
 import zio.json._
@@ -28,7 +27,7 @@ object FeederJsonDefaultSpec extends ZIOSpecDefault {
             |""".stripMargin
         val expected = Chunk(Feed("test", 1), Feed("test2", 2))
 
-        val feeder = FeederJsonDefault[Any, Feed](input)
+        val feeder = FeederJsonDefault[Feed](input).sequential
 
         for {
           result <- feeder.feed.runCollect
@@ -55,7 +54,7 @@ object FeederJsonDefaultSpec extends ZIOSpecDefault {
           Feed("test", 1)
         )
 
-        val feeder = FeederJsonDefault[Any, Feed](input, strategy = Circular)
+        val feeder = FeederJsonDefault[Feed](input).circular
 
         for {
           result <- feeder.feed.take(5).runCollect
