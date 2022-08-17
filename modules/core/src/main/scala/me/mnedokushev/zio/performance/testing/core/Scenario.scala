@@ -7,84 +7,70 @@ import zio.stream._
 
 object Scenario {
 
-  def apply(name: String): SimpleScenario[Unit] =
-    SimpleScenario(name, Chain(ZIO.unit))
+  def apply(name: String): SimpleScenario =
+    SimpleScenario(name, ZIO.unit)
 
-  def apply[A, B: Tag](name: String, feeder: Feeder[A, B]): FeederScenario[A, B, Unit] =
-    FeederScenario(name, Chain(ZIO.unit), feeder)
-
-  case class Chain[-S, O](materialized: ZIO[S, Throwable, Unit], last: Option[Action[S, O]] = None)
+  def apply[A, B: Tag](name: String, feeder: Feeder[A, B]): FeederScenario[A, B] =
+    FeederScenario(name, ZIO.unit, feeder)
 
 }
 
-abstract class Scenario[S: Tag, U] {
+abstract class Scenario[S: Tag] {
 
   protected val name: String
 
-  protected val chain: Scenario.Chain[S, U]
+  protected val chain: ZIO[S, Throwable, Unit]
 
   def run: ZStream[ZState[Session.State], String, Unit]
 
-  def exec[O](action: ExecAction[S, O]): Scenario[S, O] =
+  def exec[O](action: ExecAction[S, O]): Scenario[S] =
     addAction(action)
 
-  def pause(action: PauseAction[S]): Scenario[S, Unit] =
+  def pause(action: PauseAction[S]): Scenario[S] =
     addAction(action)
 
-  protected def nextChain[O](action: Action[S, O]): Scenario.Chain[S, O] =
-    chain.last match {
-      case Some(last) =>
-        chain.copy(materialized = chain.materialized *> last.run.unit, last = Some(action))
-      case _          =>
-        chain.copy(last = Some(action))
-    }
+  protected def nextChain[O](action: Action[S, O]): ZIO[S, Throwable, Unit] =
+    chain *> action.run.unit
 
-  protected def materializeChain: ZIO[S, Throwable, Unit] = chain.last match {
-    case Some(last) =>
-      chain.materialized *> last.run.unit
-    case _          =>
-      chain.materialized
-  }
-
-  protected def addAction[O](action: Action[S, O]): Scenario[S, O]
+  protected def addAction[O](action: Action[S, O]): Scenario[S]
 
 }
 
-case class SimpleScenario[U](name: String, chain: Scenario.Chain[SimpleSession, U]) extends Scenario[SimpleSession, U] {
+case class SimpleScenario(name: String, chain: ZIO[SimpleSession, Throwable, Unit]) extends Scenario[SimpleSession] {
 
-  override protected def addAction[O](action: Action[SimpleSession, O]): Scenario[SimpleSession, O] =
+  override protected def addAction[O](action: Action[SimpleSession, O]): Scenario[SimpleSession] =
     this.copy(chain = nextChain(action))
 
   override def run: ZStream[ZState[Session.State], String, Unit] =
-    ZStream.fromZIO(materializeChain).mapError(_.getMessage).provideLayer(SimpleSession.layer)
+    ZStream.fromZIO(chain).mapError(_.getMessage).provideLayer(SimpleSession.layer)
 
-  def feeder: SimpleScenario.FeederPartiallyApplied[U] =
+  def feeder: SimpleScenario.FeederPartiallyApplied =
     new SimpleScenario.FeederPartiallyApplied(name, chain)
 
 }
 
 object SimpleScenario {
 
-  final class FeederPartiallyApplied[U](name: String, chain: Scenario.Chain[SimpleSession, U]) {
-    def apply[A, B: Tag](feeder: Feeder[A, B]): FeederScenario[A, B, U] =
-      new FeederScenario[A, B, U](name, chain, feeder)
+  final class FeederPartiallyApplied(name: String, chain: ZIO[SimpleSession, Throwable, Unit]) {
+    def apply[A, B: Tag](feeder: Feeder[A, B]): FeederScenario[A, B] =
+      new FeederScenario[A, B](name, chain, feeder)
   }
 
 }
 
-case class FeederScenario[A, B: Tag, U](
+case class FeederScenario[A, B: Tag](
   name: String,
-  chain: Scenario.Chain[FeederSession[B], U],
+  chain: ZIO[FeederSession[B], Throwable, Unit],
   feeder: Feeder[A, B]
-) extends Scenario[FeederSession[B], U] {
+) extends Scenario[FeederSession[B]] {
 
-  override protected def addAction[O](action: Action[FeederSession[B], O]): Scenario[FeederSession[B], O] =
+  override protected def addAction[O](action: Action[FeederSession[B], O]): Scenario[FeederSession[B]] =
     this.copy(chain = nextChain(action))
 
   override def run: ZStream[ZState[Session.State], String, Unit] =
     feeder.feed.flatMap { feed =>
       ZStream
-        .fromZIO(materializeChain)
+        .fromZIO(chain)
         .mapError(_.getMessage)
         .provideLayer(FeederSession.layer(feed))
     }

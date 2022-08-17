@@ -51,7 +51,7 @@ object ScenarioSpec extends ZIOSpecDefault {
           )
           .exec(
             SimpleExecAction[String](s => ZIO.succeed(s.getOrElse("foo", "bar")))
-              .check(Checker((s, a) => s.set("foo1", a.toString).as(true)))
+              .check(Checker((s, a) => s.set("foo1", a).as(true)))
           )
 
         ZIO.stateful(Map.empty[String, String]) {
