@@ -10,9 +10,6 @@ object Scenario {
   def apply(name: String): SimpleScenario =
     SimpleScenario(name, ZIO.unit)
 
-  def apply[A, B: Tag](name: String, feeder: Feeder[A, B]): FeederScenario[A, B] =
-    FeederScenario(name, ZIO.unit, feeder)
-
 }
 
 abstract class Scenario[S: Tag] {
@@ -52,16 +49,16 @@ case class SimpleScenario(name: String, chain: ZIO[SimpleSession, Throwable, Uni
 object SimpleScenario {
 
   final class FeederPartiallyApplied(name: String, chain: ZIO[SimpleSession, Throwable, Unit]) {
-    def apply[A, B: Tag](feeder: Feeder[A, B]): FeederScenario[A, B] =
-      new FeederScenario[A, B](name, chain, feeder)
+    def apply[B: Tag](feeder: Feeder[B]): FeederScenario[B] =
+      new FeederScenario[B](name, chain, feeder)
   }
 
 }
 
-case class FeederScenario[A, B: Tag](
+case class FeederScenario[B: Tag](
   name: String,
   chain: ZIO[FeederSession[B], Throwable, Unit],
-  feeder: Feeder[A, B]
+  feeder: Feeder[B]
 ) extends Scenario[FeederSession[B]] {
 
   override protected def addAction[O](action: Action[FeederSession[B], O]): Scenario[FeederSession[B]] =

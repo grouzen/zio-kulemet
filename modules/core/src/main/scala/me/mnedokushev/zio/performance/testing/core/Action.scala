@@ -3,7 +3,7 @@ package me.mnedokushev.zio.performance.testing.core
 import me.mnedokushev.zio.performance.testing.core.Session.{ FeederSession, SimpleSession }
 import zio._
 
-abstract class Action[-S: Tag, A] { self =>
+abstract class Action[S: Tag, A] { self =>
 
   def run: RIO[S, A]
 

@@ -12,7 +12,7 @@ class Runner {
 
   implicit val feedDecoder = DeriveJsonDecoder.gen[Feed]
 
-  val scn = Scenario("test", FeederJsonDefault("""[{"foo": "bar"}]"""))
+//  val scn = Scenario("test", FeederJsonDefault("""[{"foo": "bar"}]"""))
 //
 //  val dhp = new DefaultHttpAction[FeederSession[Feed]]
 //
