@@ -4,7 +4,7 @@ import zio._
 
 trait Session {
 
-  protected val state: ZState[Session.State]
+  protected val state: FiberRef[Session.State]
 
   def get: UIO[Map[String, String]] =
     state.get
@@ -13,11 +13,7 @@ trait Session {
     state.get.map(_.get(key))
 
   def set(key: String, value: String): UIO[Unit] =
-    for {
-      current <- state.get
-      updated  = current.updated(key, value)
-      _       <- state.set(updated)
-    } yield ()
+    state.update(_.updated(key, value))
 
 }
 
@@ -29,11 +25,11 @@ object Session {
 
   object SimpleSession {
 
-    def layer: URLayer[ZState[State], SimpleSession] =
-      ZLayer {
-        ZIO.serviceWith[ZState[State]] { initialState =>
+    def layer: ULayer[SimpleSession] =
+      ZLayer.scoped {
+        FiberRef.make(Map.empty[String, String]).map { initialState =>
           new SimpleSession {
-            override protected val state: ZState[State] = initialState
+            override protected val state: FiberRef[State] = initialState
           }
         }
       }
@@ -46,12 +42,12 @@ object Session {
 
   object FeederSession {
 
-    def layer[A: Tag](initialFeed: A): URLayer[ZState[State], FeederSession[A]] =
-      ZLayer {
-        ZIO.serviceWith[ZState[State]] { initialState =>
+    def layer[A: Tag](initialFeed: A): ULayer[FeederSession[A]] =
+      ZLayer.scoped {
+        FiberRef.make(Map.empty[String, String]).map { initialState =>
           new FeederSession[A] {
-            override val feed: A                        = initialFeed
-            override protected val state: ZState[State] = initialState
+            override val feed: A                          = initialFeed
+            override protected val state: FiberRef[State] = initialState
           }
         }
       }

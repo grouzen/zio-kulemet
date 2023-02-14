@@ -17,16 +17,17 @@ object ScenarioSpec extends ZIOSpecDefault {
               FeederExecAction[Int, Int]((_, b) => ZIO.succeed(b))
                 .check(Checker((s, a) => s.set("foo", a.toString).as(true)))
             )
+            .exec(
+              FeederExecAction[Int, Int]((_, b) => ZIO.succeed(b))
+                .check(Checker((s, a) => s.get("foo").map(r => r.contains(a.toString))))
+            )
 
-        ZIO.stateful(Map.empty[String, String]) {
-          for {
-            state   <- ZIO.service[ZState[Session.State]]
-            _       <- scn.run.drain.runCollect
-            session <- state.get
-            result   = session.get("foo")
-          } yield assertTrue(result.contains("1"))
-        }
-      },
+        for {
+          stats    <- ZIO.service[Stats]
+          _        <- scn.run.runDrain
+          counters <- stats.getCounters
+        } yield assertTrue(counters.ok == 2)
+      }.provideLayer(Stats.layer),
       test("Modify session via check") {
         val scn = Scenario("test")
           .exec(
@@ -34,35 +35,49 @@ object ScenarioSpec extends ZIOSpecDefault {
               .check(Checker((s, a) => s.set("foo", a.toString).as(true)))
           )
 
-        ZIO.stateful(Map.empty[String, String]) {
-          for {
-            session <- ZIO.service[ZState[Session.State]]
-            _       <- scn.run.drain.runCollect
-            state   <- session.get
-            result   = state.get("foo")
-          } yield assertTrue(result.contains("1"))
-        }
-      },
+        for {
+          stats    <- ZIO.service[Stats]
+          _        <- scn.run.runDrain
+          counters <- stats.getCounters
+        } yield assertTrue(counters.ok == 1)
+      }.provideLayer(Stats.layer),
       test("Use the value set by checker in the next exec action") {
         val scn = Scenario("test")
           .exec(
-            SimpleExecAction[Int](_ => ZIO.succeed(1))
-              .check(Checker((s, a) => s.set("foo", a.toString).as(true)))
+            SimpleExecAction[String](_ => ZIO.succeed("cat"))
+              .check(Checker((s, a) => s.set("foo", a).as(true)))
           )
           .exec(
-            SimpleExecAction[String](s => ZIO.succeed(s.getOrElse("foo", "bar")))
-              .check(Checker((s, a) => s.set("foo1", a).as(true)))
+            SimpleExecAction[String](s => ZIO.succeed(s.getOrElse("foo", "dog")))
+              .check(Checker((_, a) => ZIO.succeed(a == "cat")))
           )
 
-        ZIO.stateful(Map.empty[String, String]) {
-          for {
-            session <- ZIO.service[ZState[Session.State]]
-            _       <- scn.run.drain.runCollect
-            state   <- session.get
-            result   = state.get("foo1")
-          } yield assertTrue(result.contains("1"))
-        }
-      }
+        for {
+          stats    <- ZIO.service[Stats]
+          _        <- scn.run.runDrain
+          counters <- stats.getCounters
+        } yield assertTrue(counters.ok == 2)
+      }.provideLayer(Stats.layer),
+      test("Session should not be shared between virtual users") {
+        val scn = Scenario("test")
+          .feeder(new FiniteFeeder(Some(List("cat", "dog", "fox"))))
+          .exec(
+            FeederExecAction[String, String]((_, a) => ZIO.succeed(a))
+              .check(Checker { case (s, a) =>
+                for {
+                  prev <- s.get("key")
+                  value = prev.getOrElse("") + a
+                  _    <- s.set("key", value)
+                } yield value == a // it means that prev was not set
+              })
+          )
+
+        for {
+          stats    <- ZIO.service[Stats]
+          _        <- scn.run.runDrain
+          counters <- stats.getCounters
+        } yield assertTrue(counters.ok == 3)
+      }.provideLayer(Stats.layer)
     )
 
 }

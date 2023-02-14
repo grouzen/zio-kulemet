@@ -4,8 +4,12 @@ import zio._
 
 case class Checker[S: Tag, A](body: (S, A) => UIO[Boolean]) {
 
-  // TODO: check the result of body and update requests stats
-  def check(result: A): URIO[S, Unit] =
-    ZIO.serviceWithZIO[S](s => body(s, result).unit)
+  def check(actionResult: A): URIO[S with Stats, Unit] =
+    for {
+      state  <- ZIO.service[S]
+      stats  <- ZIO.service[Stats]
+      result <- body(state, actionResult)
+      _      <- if (result) stats.incOK else stats.incKO
+    } yield ()
 
 }
